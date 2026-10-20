@@ -133,33 +133,41 @@ class Permission extends BaseModel
         ): '';
         $controller = Str::beforeLast($attrs['uid'], $controller);
         $has_method = false;
+        $is_auth = false;
 
         foreach (Route::getRoutes() as $route) {
-            if (
-                isset($route->action['middleware']) &&
-                in_array('lpfauth:sanctum', $route->action['middleware'])
-            ) {
-                $uid = ra_to_uid($route);
-
-                // TODO: filter permission request on permission type uid ENDPOINT
-                if (Str::startsWith($uid, "{$controller}_")) {
-                    $has_method = !$has_method? Str::contains(
-                        $attrs['uid'], Str::after($uid, "{$controller}_")
-                    ): $has_method;
-
-                    if ($has_method || Permission::where(
-                        'uid', 'LIKE', "{$uid}%"
-                    )->where(
-                        'id', '<>', $attrs['id']
-                    )->where(
-                        'permission_type_id', PermissionType::firstWhere('uid', 'ENDPOINT')->id
-                    )->count() === 0) {
-                        $routes->add([
-                            'uid'    => $uid,
-                            'uri'    => $route->uri,
-                            'method' => $route->methods
-                        ]);
+            if (isset($route->action['middleware'])) {
+                foreach ($route->action['middleware'] as $middleware) {
+                    if (Str::before($middleware, ':') === 'lpfauth') {
+                        $is_auth = true;
                     }
+                }
+
+                if ($is_auth) {
+                    $uid = ra_to_uid($route);
+
+                    // TODO: filter permission request on permission type uid ENDPOINT
+                    if (Str::startsWith($uid, "{$controller}_")) {
+                        $has_method = !$has_method? Str::contains(
+                            $attrs['uid'], Str::after($uid, "{$controller}_")
+                        ): $has_method;
+
+                        if ($has_method || Permission::where(
+                            'uid', 'LIKE', "{$uid}%"
+                        )->where(
+                            'id', '<>', $attrs['id']
+                        )->where(
+                            'permission_type_id', PermissionType::firstWhere('uid', 'ENDPOINT')->id
+                        )->count() === 0) {
+                            $routes->add([
+                                'uid'    => $uid,
+                                'uri'    => $route->uri,
+                                'method' => $route->methods
+                            ]);
+                        }
+                    }
+
+                    $is_auth = false;
                 }
             // } else {
             //     if (Str::startsWith($route->uri, 'api')) {
